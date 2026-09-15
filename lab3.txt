@@ -1,6 +1,25 @@
 1. What is a benefit (besides aliasing) of our `SharedPtr<T>` directly storing a “stored pointer” (we could always just
    access it through the control block, if we're not aliasing)?
+   Dereferencing, ->, and get() read the pointer straight out of the SharedPtr instead of chasing the control block
+   first, so every access is one pointer load instead of two.
+   It also means an empty SharedPtr doesn't need a control block at all, since it can just store nullptr.
+
 2. What is a disadvantage of having the stored pointer (instead of going through the control block)?
+   Every shared pointer pays 8 extra bytes (16 instead of 8), even though the stored pointer is the same as the managed
+   one for every non-aliasing use.
+   There are also now two pointers that can disagree, so any code that changes one has to remember to update the other.
+
 3. From a system design/architecture perspective, what disadvantages are there to using shared pointers?
+   Shared ownership hides who is actually responsible for an object's lifetime, so it's easy to keep things alive
+   longer than intended, and reference cycles never get freed at all (which is why weak pointers exist).
+   It also spreads ownership across unrelated parts of the program, so you can't tell by reading a function when its
+   objects get destroyed.
+
 4. From a performance perspective, what disadvantages there are to using shared pointers (say, versus a unique pointer
    or raw pointer)?
+   Copies and destructions have to maintain the shared count, and in std::shared_ptr that count is atomic, so you pay
+   atomic operations for ownership bookkeeping that a unique_ptr or raw pointer never needs, even in single-threaded
+   code and even when the object only ever has one owner.
+   The extra allocation only shows up in the shared_ptr<T>(new T) form, since make_shared puts the object and the
+   control block in one block, and reading through *p or -> is still a single load, so the cost lands on the copying
+   and destroying side rather than on access.
